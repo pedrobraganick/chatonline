@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -33,19 +34,21 @@ Future _ensureLoggedIn() async {
   }
 }
 
-_handleSubmitted(String text) async{
- await _ensureLoggedIn();
- _sendMessage(text: text);
+_handleSubmitted(String text) async {
+  await _ensureLoggedIn();
+  _sendMessage(text: text);
 }
 
-void _sendMessage({String text, String imgUrl}){
+void _sendMessage({String text, String imgUrl}) {
   Firestore.instance.collection("messages").add({
-    "text" :text,
-    "imgUrl":imgUrl,
+    "text": text,
+    "imgUrl": imgUrl,
     "senderName": googleSingIn.currentUser.displayName,
-    "senderPhotoUrl": googleSingIn.currentUser.photoUrl
+    "senderPhotoUrl": googleSingIn.currentUser.photoUrl,
+    "senderDate": new DateTime.now().toIso8601String()
   });
 }
+
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -81,8 +84,25 @@ class _ChatScreenState extends State<ChatScreen> {
         body: Column(
           children: <Widget>[
             Expanded(
-              child: ListView(
-                children: <Widget>[ChatMessage(), ChatMessage(), ChatMessage()],
+              child: StreamBuilder(
+                stream: Firestore.instance.collection("messages").orderBy("senderDate",descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  switch(snapshot.connectionState){
+                    case ConnectionState.none :
+                    case ConnectionState.waiting:
+                      return Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    default:
+                      return ListView.builder(
+                        reverse: true,
+                          itemCount: snapshot.data.documents.length,
+                          itemBuilder: (context, index){
+                            return ChatMessage(snapshot.data.documents[index].data);
+                          }
+                      );
+                  }
+                },
               ),
             ),
             Divider(
@@ -108,14 +128,15 @@ class TextComposer extends StatefulWidget {
 
 class _TextComposerState extends State<TextComposer> {
   bool _isComposing = false;
-final _textControlller = TextEditingController();
+  final _textControlller = TextEditingController();
 
-void _reset() {
-  _textControlller.clear();
-  setState(() {
-    _isComposing = false;
-  });
-}
+  void _reset() {
+    _textControlller.clear();
+    setState(() {
+      _isComposing = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return IconTheme(
@@ -144,7 +165,10 @@ void _reset() {
                     _isComposing = text.length > 0;
                   });
                 },
-                onSubmitted: (text){ _handleSubmitted(text); _reset();},
+                onSubmitted: (text) {
+                  _handleSubmitted(text);
+                  _reset();
+                },
               ),
             ),
             Container(
@@ -152,11 +176,21 @@ void _reset() {
               child: Theme.of(context).platform == TargetPlatform.iOS
                   ? CupertinoButton(
                       child: Text("Enviar"),
-                      onPressed: _isComposing ? (){_handleSubmitted(_textControlller.text); _reset();} : null,
+                      onPressed: _isComposing
+                          ? () {
+                              _handleSubmitted(_textControlller.text);
+                              _reset();
+                            }
+                          : null,
                     )
                   : IconButton(
                       icon: Icon(Icons.send),
-                      onPressed: _isComposing ? () { _handleSubmitted(_textControlller.text); _reset();} : null,
+                      onPressed: _isComposing
+                          ? () {
+                              _handleSubmitted(_textControlller.text);
+                              _reset();
+                            }
+                          : null,
                     ),
             )
           ],
@@ -167,6 +201,11 @@ void _reset() {
 }
 
 class ChatMessage extends StatelessWidget {
+
+  final Map<String,dynamic> data;
+
+  ChatMessage(this.data);
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -176,19 +215,21 @@ class ChatMessage extends StatelessWidget {
         children: <Widget>[
           Container(
             margin: const EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(),
+            child: CircleAvatar(
+              backgroundImage: NetworkImage(data["senderPhotoUrl"].toString()),
+            ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  "Daniel",
+                  data["senderName"],
                   style: Theme.of(context).textTheme.subhead,
                 ),
                 Container(
                   margin: const EdgeInsets.only(top: 5.0),
-                  child: Text("TESTE"),
+                  child: data["imgUrl"] != null ? Image.network(data["imgUrl"], width: 250.0,) : Text(data["text"]),
                 )
               ],
             ),
