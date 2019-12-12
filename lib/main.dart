@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -152,7 +156,20 @@ class _TextComposerState extends State<TextComposer> {
             Container(
               child: IconButton(
                 icon: Icon(Icons.photo_camera),
-                onPressed: () {},
+                onPressed: () async{
+                  await _ensureLoggedIn();
+                  File file = await ImagePicker.pickImage(source: ImageSource.camera);
+                  if(file == null)
+                    return;
+                  else{
+                    var task = FirebaseStorage.instance.ref().child(googleSingIn.currentUser.id.toString() +
+                        DateTime.now().millisecondsSinceEpoch.toString()).putFile(file);
+                    StorageTaskSnapshot taskSnapshot = await task.onComplete;
+                    String url = await taskSnapshot.ref.getDownloadURL();
+                    _sendMessage(imgUrl: url);
+                  }
+
+                },
               ),
             ),
             Expanded(
